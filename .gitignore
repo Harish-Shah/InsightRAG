@@ -1,0 +1,53 @@
+# ---- Source PDFs (large files, not for version control) ----
+pdf_for_RAG/
+
+# ---- Secrets & environment ----
+.env
+.env.*
+!.env.example
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+*.venv
+venv/
+env/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# ---- Generated data (keep the dirs via .gitkeep, ignore their contents) ----
+data/chroma/
+data/assets/
+data/app.db
+data/metadata.json
+!data/chroma/.gitkeep
+!data/assets/.gitkeep
+
+# ---- Model / HF cache (in case it lands in the project) ----
+.cache/
+*.bin.lock
+
+# ---- Frontend (Phase 5) ----
+node_modules/
+frontend/dist/
+frontend/dist-ssr/
+*.local
+
+# ---- Claude Code internals & local logs ----
+.claude/
+_reset.log
+
+# ---- Editor / OS ----
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
