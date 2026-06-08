@@ -13,18 +13,19 @@ Run:  uvicorn backend.main:app --reload
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend import db
-from backend.chain import ask
+from backend.chain import ask, astream_ask
 from backend.config import settings
 from backend.embeddings import get_embeddings
 from backend.vectorstore import collection_count, get_vectorstore
@@ -46,6 +47,15 @@ async def lifespan(app: FastAPI):
         logger.info("Vector index ready: %s chunks", n)
     except Exception as exc:  # noqa: BLE001 - server should still start
         logger.warning("Index warmup failed (queries may be slow/empty): %s", exc)
+    if settings.RERANK_ENABLED:                # warm the reranker (best-effort)
+        try:
+            from backend.reranker import get_reranker
+            get_reranker()
+            logger.info("Reranker ready: backend=%s model=%s (%d -> %d)",
+                        settings.RERANK_BACKEND, settings.RERANK_MODEL,
+                        settings.RERANK_CANDIDATES, settings.RERANK_TOP_N)
+        except Exception as exc:  # noqa: BLE001 - falls back to plain top-k at query time
+            logger.warning("Reranker warmup failed (will use plain top-k): %s", exc)
     logger.info("NIM key present: %s | model: %s",
                 settings.has_nvidia_key, settings.NVIDIA_MODEL)
     yield
@@ -207,6 +217,67 @@ def chat(req: ChatRequest) -> ChatResponse:
         answer_markdown=result["answer_markdown"],
         citations=result["citations"],
         visuals=result["visuals"],
+    )
+
+
+# --- Chat (streaming: SSE over StreamingResponse) ---------------------------
+def _sse(event: dict[str, Any]) -> str:
+    """Format one event as a Server-Sent-Events frame."""
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(req: ChatRequest) -> StreamingResponse:
+    """Stream a grounded answer token-by-token; citations/visuals sent at the end.
+
+    Mirrors /api/chat's retrieval -> rerank -> generate flow and persistence, but
+    pushes tokens the moment generation starts. Event protocol (SSE ``data:`` JSON):
+    ``meta`` -> ``token``* -> ``metadata`` -> ``done`` (or ``error`` on failure).
+    """
+    message = req.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message must not be empty")
+
+    # Resolve or create the session.
+    session_id = req.session_id
+    if session_id:
+        if db.get_session(session_id) is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+    else:
+        session_id = db.create_session(_auto_title(message))
+
+    # History = messages before this turn (for follow-up rewriting).
+    detail = db.get_session_with_messages(session_id)
+    history = [{"role": m["role"], "content": m["content"]} for m in detail["messages"]]
+
+    # Persist the user message first so it survives an LLM failure / disconnect.
+    db.add_message(session_id, "user", message)
+
+    async def event_gen() -> AsyncIterator[str]:
+        yield _sse({"type": "meta", "session_id": session_id})
+        final: Optional[dict[str, Any]] = None
+        try:
+            async for ev in astream_ask(message, history):
+                if ev["type"] == "final":
+                    final = ev          # internal: authoritative text for persistence
+                    continue
+                yield _sse(ev)
+            # Persist the completed assistant message only on success.
+            if final is not None:
+                db.add_message(session_id, "assistant", final["answer_markdown"],
+                               visuals=final["visuals"], citations=final["citations"])
+            db.touch_session(session_id)
+            yield _sse({"type": "done"})
+        except Exception as exc:  # noqa: BLE001 - surface as a graceful error event
+            logger.exception("chat stream generation failed")
+            db.touch_session(session_id)
+            yield _sse({"type": "error",
+                        "detail": f"The assistant is temporarily unavailable. ({exc})"})
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

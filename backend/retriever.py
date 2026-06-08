@@ -9,19 +9,56 @@ Two paths over the same store:
 
 from __future__ import annotations
 
+import logging
+
+from langchain.retrievers import ContextualCompressionRetriever
 from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_core.retrievers import BaseRetriever
 
 from backend.config import settings
+from backend.reranker import get_reranker
 from backend.vectorstore import get_vectorstore
+
+log = logging.getLogger("rag.retriever")
 
 # Visual content types surfaced by retrieve_visuals (text chunks excluded).
 VISUAL_TYPES = ["table", "image", "figure"]
 
 
-def get_text_retriever() -> VectorStoreRetriever:
-    """Top-k similarity retriever over all chunks (text + visuals)."""
-    return get_vectorstore().as_retriever(search_kwargs={"k": settings.TOP_K})
+def _plain_retriever(k: int) -> BaseRetriever:
+    """Plain top-k similarity retriever over all chunks (text + visuals)."""
+    return get_vectorstore().as_retriever(search_kwargs={"k": k})
+
+
+def get_text_retriever() -> BaseRetriever:
+    """Retriever feeding the RAG chain.
+
+    With reranking enabled (the default): pull ``RERANK_CANDIDATES`` from Chroma and
+    wrap them in a cross-encoder reranker that returns the best ``RERANK_TOP_N``. The
+    (condensed) query flows in via ``create_history_aware_retriever``, so the reranker
+    scores against the rewritten question.
+
+    With reranking disabled - or if the reranker cannot be built (no key / load error)
+    - fall back to the plain top-``TOP_K`` similarity retriever, i.e. the legacy
+    behaviour. Per-query scoring failures degrade inside the reranker itself.
+    """
+    if not settings.RERANK_ENABLED:
+        return _plain_retriever(settings.TOP_K)
+
+    if settings.RERANK_BACKEND.strip().lower() == "nvidia" and not settings.has_nvidia_key:
+        log.warning("RERANK_BACKEND=nvidia but NVIDIA_API_KEY is not set; "
+                    "reranking disabled, using plain top-%d.", settings.TOP_K)
+        return _plain_retriever(settings.TOP_K)
+
+    base = _plain_retriever(settings.RERANK_CANDIDATES)
+    try:
+        return ContextualCompressionRetriever(
+            base_compressor=get_reranker(), base_retriever=base
+        )
+    except Exception as exc:  # noqa: BLE001 - degrade gracefully, never block retrieval
+        log.warning("reranker init failed (%s); using plain top-%d.",
+                    exc, settings.TOP_K)
+        return _plain_retriever(settings.TOP_K)
 
 
 def retrieve_visuals(query: str, k: int | None = None) -> list[tuple[Document, float]]:
@@ -40,8 +77,11 @@ def retrieve_visuals(query: str, k: int | None = None) -> list[tuple[Document, f
 
 if __name__ == "__main__":  # Manual check: python -m backend.retriever
     q = "rural infrastructure development fund"
-    print(f"text retriever (k={settings.TOP_K}):")
-    for d in get_text_retriever().invoke(q)[:3]:
+    mode = (f"rerank {settings.RERANK_CANDIDATES}->{settings.RERANK_TOP_N} "
+            f"[{settings.RERANK_BACKEND}]") if settings.RERANK_ENABLED \
+        else f"top-{settings.TOP_K}"
+    print(f"text retriever ({mode}):")
+    for d in get_text_retriever().invoke(q):
         m = d.metadata
         print(f"  {m['content_type']:6s} [{m['report_year']}, p.{m['page']}]")
     print(f"\nretrieve_visuals (k={settings.VISUAL_K}):")

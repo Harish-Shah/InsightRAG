@@ -58,6 +58,73 @@ export async function sendChat(message, sessionId) {
   }
 }
 
+// Streaming chat over SSE (fetch + ReadableStream; EventSource can't POST a body).
+// Dispatches parsed events to handlers as they arrive:
+//   onMeta({session_id}), onToken(text), onMetadata({citations, visuals}),
+//   onDone(), onError(message).
+export async function sendChatStream(
+  message,
+  sessionId,
+  { onMeta, onToken, onMetadata, onDone, onError } = {},
+) {
+  let res
+  try {
+    res = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId ?? null, message }),
+    })
+  } catch {
+    onError?.('Cannot reach the server. Is the backend running?')
+    return
+  }
+  if (!res.ok || !res.body) {
+    let detail = 'The assistant could not answer. Please try again.'
+    try {
+      const body = await res.json()
+      if (typeof body?.detail === 'string') detail = body.detail
+    } catch {
+      /* non-JSON error body */
+    }
+    onError?.(detail)
+    return
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+
+  const dispatch = (evt) => {
+    switch (evt.type) {
+      case 'meta': onMeta?.(evt); break
+      case 'token': onToken?.(evt.text); break
+      case 'metadata': onMetadata?.(evt); break
+      case 'done': onDone?.(); break
+      case 'error': onError?.(evt.detail || 'Something went wrong.'); break
+      default: /* ignore unknown event types */
+    }
+  }
+
+  // SSE frames are separated by a blank line; each carries one `data: <json>`.
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let sep
+    while ((sep = buf.indexOf('\n\n')) !== -1) {
+      const frame = buf.slice(0, sep)
+      buf = buf.slice(sep + 2)
+      const line = frame.split('\n').find((l) => l.startsWith('data:'))
+      if (!line) continue
+      try {
+        dispatch(JSON.parse(line.slice(5).trim()))
+      } catch {
+        /* skip malformed frame */
+      }
+    }
+  }
+}
+
 // visuals[].url is already "/api/assets/..."; the proxy resolves it directly.
 export function assetUrl(url) {
   return url

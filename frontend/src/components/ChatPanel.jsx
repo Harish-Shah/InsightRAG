@@ -1,19 +1,9 @@
 // Scrollable conversation + input + loading/error UX (Task 5.4/5.5).
+// The streaming assistant placeholder (in App.handleSend) renders its own
+// in-bubble typing indicator, so no separate global indicator is needed.
 import { useEffect, useRef } from 'react'
 import MessageBubble from './MessageBubble'
 import ChatInput from './ChatInput'
-
-function TypingIndicator() {
-  return (
-    <div className="flex justify-start">
-      <div className="flex items-center gap-1 rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3">
-        <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]" />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]" />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" />
-      </div>
-    </div>
-  )
-}
 
 export default function ChatPanel({ messages, loading, error, onSend, onDismissError }) {
   const bottomRef = useRef(null)
@@ -42,7 +32,6 @@ export default function ChatPanel({ messages, loading, error, onSend, onDismissE
           {messages.map((m, i) => (
             <MessageBubble key={m.id ?? i} message={m} />
           ))}
-          {loading && <TypingIndicator />}
           <div ref={bottomRef} />
         </div>
       </div>

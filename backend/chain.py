@@ -15,9 +15,11 @@ Public entry point used by Phase 4's /api/chat:  ``ask(query, chat_history)``.
 
 from __future__ import annotations
 
+import logging
 import re
+import time
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -29,10 +31,13 @@ from backend.config import settings
 from backend.llm import get_llm
 from backend.retriever import get_text_retriever, retrieve_visuals
 
+log = logging.getLogger("rag.chain")
+
 # Keep the last N messages of history in context (≈ last 4 turns).
 HISTORY_MESSAGES = 8
 REFUSAL = "I could not find this in the documents."
 _VISUAL_TAG_RE = re.compile(r"\[VISUAL:\s*([^\]]+)\]", re.IGNORECASE)
+_VISUAL_OPEN = "[VISUAL:"  # prefix we must never let flash mid-stream
 
 # --- Prompts -----------------------------------------------------------------
 _CONDENSE_PROMPT = ChatPromptTemplate.from_messages([
@@ -118,10 +123,73 @@ def answer(query: str, chat_history: Optional[list] = None) -> dict[str, Any]:
     return {"answer": out["answer"], "context": out.get("context", [])}
 
 
+# --- Incremental [VISUAL: id] stripping (for live token streaming) ----------
+def _safe_split(buf: str) -> tuple[str, str]:
+    """Split a buffer into (emit_now, hold_back).
+
+    Holds back only a trailing suffix that could still grow into a ``[VISUAL: ..]``
+    tag, so the tag never flashes mid-stream. Inline citation brackets such as
+    ``[Annual Report 2022-23, p.45]`` are NOT held back.
+    """
+    idx = buf.rfind("[")
+    while idx != -1:
+        tail = buf[idx:]
+        upper = tail.upper()
+        if upper.startswith(_VISUAL_OPEN):
+            # An opened VISUAL tag: hold it back until its closing ']' arrives
+            # (complete tags are already removed by the caller's regex sub).
+            return buf[:idx], tail
+        if _VISUAL_OPEN.startswith(upper):
+            # A partial prefix of "[VISUAL:" (e.g. "[VI") -> hold back.
+            return buf[:idx], tail
+        # Some other bracket (e.g. a citation): check any earlier '['.
+        idx = buf.rfind("[", 0, idx)
+    return buf, ""
+
+
+def _make_visual_stripper():
+    """Stateful stripper: feed tokens, get back tag-free text safe to emit now."""
+    buf = ""
+
+    def feed(token: str) -> str:
+        nonlocal buf
+        buf += token
+        buf = _VISUAL_TAG_RE.sub("", buf)
+        emit, buf = _safe_split(buf)
+        return emit
+
+    def flush() -> str:
+        nonlocal buf
+        out = _VISUAL_TAG_RE.sub("", buf)
+        buf = ""
+        return out
+
+    return feed, flush
+
+
 # --- Post-processing (Task 3.5) ---------------------------------------------
 def _short_year(report_year: str) -> str:
     """'Annual Report 2022-23' -> 'AR 2022-23'."""
     return (report_year or "").replace("Annual Report", "AR").strip() or "?"
+
+
+def _citations_from_context(context: list[Document]) -> list[dict]:
+    """Citations from retrieved context, deduped by (report_year, page)."""
+    citations: list[dict] = []
+    seen_c: set = set()
+    for d in context:
+        m = d.metadata
+        key = (m.get("report_year"), m.get("page"))
+        if key in seen_c or not m.get("report_year"):
+            continue
+        seen_c.add(key)
+        citations.append({
+            "report_year": m.get("report_year"),
+            "page": m.get("page"),
+            "source_pdf": m.get("source_pdf"),
+            "label": f"{_short_year(m.get('report_year'))} · p.{m.get('page')}",
+        })
+    return citations
 
 
 def _visual_from_doc(doc: Document) -> Optional[dict]:
@@ -179,21 +247,7 @@ def assemble_response(raw: dict[str, Any], query: str) -> dict[str, Any]:
                     visuals.append(v)
                 break
 
-    # Citations from context, deduped by (report_year, page).
-    citations: list[dict] = []
-    seen_c: set = set()
-    for d in context:
-        m = d.metadata
-        key = (m.get("report_year"), m.get("page"))
-        if key in seen_c or not m.get("report_year"):
-            continue
-        seen_c.add(key)
-        citations.append({
-            "report_year": m.get("report_year"),
-            "page": m.get("page"),
-            "source_pdf": m.get("source_pdf"),
-            "label": f"{_short_year(m.get('report_year'))} · p.{m.get('page')}",
-        })
+    citations = _citations_from_context(context)
 
     return {"answer_markdown": clean, "citations": citations, "visuals": visuals}
 
@@ -201,6 +255,72 @@ def assemble_response(raw: dict[str, Any], query: str) -> dict[str, Any]:
 def ask(query: str, chat_history: Optional[list] = None) -> dict[str, Any]:
     """Public entry point: grounded answer + citations + visuals (API contract)."""
     return assemble_response(answer(query, chat_history), query)
+
+
+async def astream_ask(
+    query: str, chat_history: Optional[list] = None
+) -> AsyncIterator[dict[str, Any]]:
+    """Streaming entry point. Async-yields structured events::
+
+        {"type": "token",    "text": ...}                 # repeated, live answer
+        {"type": "metadata", "citations": [], "visuals": []}   # once, at completion
+        {"type": "final",    "answer_markdown", "citations", "visuals"}  # internal
+
+    Tokens come straight from ``ChatNVIDIA`` via the retrieval chain's ``.astream``
+    (no buffering). ``[VISUAL: id]`` tags are stripped incrementally so they never
+    flash. Citations/visuals are resolved from the full answer + context at the end
+    by reusing ``assemble_response`` (keeps refusal/visual behavior identical). The
+    final event carries the authoritative text for persistence (not sent to client).
+    """
+    chain = build_chain()
+    feed, flush = _make_visual_stripper()
+    context: list[Document] = []
+    raw_text = ""
+    n_tokens = 0
+    t0 = time.perf_counter()
+    t_retrieval: Optional[float] = None
+    t_first_token: Optional[float] = None
+
+    async for chunk in chain.astream({
+        "input": query,
+        "chat_history": _to_messages(chat_history),
+    }):
+        ctx = chunk.get("context")
+        if ctx and not context:
+            context = ctx
+            t_retrieval = time.perf_counter() - t0
+        piece = chunk.get("answer")
+        if piece:
+            if t_first_token is None:
+                t_first_token = time.perf_counter() - t0
+            raw_text += piece
+            n_tokens += 1
+            emit = feed(piece)
+            if emit:
+                yield {"type": "token", "text": emit}
+
+    tail = flush()
+    if tail:
+        yield {"type": "token", "text": tail}
+
+    final = assemble_response({"answer": raw_text, "context": context}, query)
+    yield {"type": "metadata",
+           "citations": final["citations"], "visuals": final["visuals"]}
+
+    t_end = time.perf_counter() - t0
+    gen = (t_end - t_first_token) if t_first_token is not None else None
+    log.info(
+        "stream timings: retrieval+rerank=%s ttft=%s generation=%s total=%.2fs chunks=%d",
+        f"{t_retrieval:.2f}s" if t_retrieval is not None else "n/a",
+        f"{t_first_token:.2f}s" if t_first_token is not None else "n/a",
+        f"{gen:.2f}s" if gen is not None else "n/a",
+        t_end, n_tokens,
+    )
+
+    yield {"type": "final",
+           "answer_markdown": final["answer_markdown"],
+           "citations": final["citations"],
+           "visuals": final["visuals"]}
 
 
 if __name__ == "__main__":  # Manual smoke: python -m backend.chain

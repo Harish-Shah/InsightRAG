@@ -93,7 +93,7 @@ Every tunable is environment-driven (relative paths resolve to the project root)
 | `PDF_DIR` | `pdf_for_RAG` | source PDFs |
 | `CHROMA_DIR` / `ASSETS_DIR` / `METADATA_PATH` / `SQLITE_PATH` | under `data/` | storage paths |
 | `COLLECTION_NAME` | `annual_reports` | Chroma collection |
-| `TOP_K` / `VISUAL_K` / `VISUAL_SIM_THRESHOLD` | `8` / `3` / `0.4` | retrieval + visual safety-net tuning |
+| `TOP_K` / `VISUAL_K` / `VISUAL_SIM_THRESHOLD` | `8` / `3` / `0.6` | retrieval + visual safety-net tuning |
 | `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | allowed frontend origins |
 
 ---

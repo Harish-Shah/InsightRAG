@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatPanel from './components/ChatPanel'
 import {
-  listSessions, getSession, sendChat, deleteSession,
+  listSessions, getSession, sendChatStream, deleteSession,
   getStoredSessionId, setStoredSessionId, clearStoredSessionId,
 } from './utils/api'
 
@@ -67,31 +67,58 @@ export default function App() {
     refreshSessions()
   }
 
+  // Immutably update the last (streaming) assistant message in place.
+  const updateLastAssistant = (patch) =>
+    setMessages((prev) => {
+      if (!prev.length) return prev
+      const next = prev.slice()
+      const last = next[next.length - 1]
+      next[next.length - 1] =
+        typeof patch === 'function' ? patch(last) : { ...last, ...patch }
+      return next
+    })
+
   const handleSend = async (message) => {
     setError(null)
-    setMessages((prev) => [...prev, { role: 'user', content: message }])
+    // User message + an empty assistant placeholder that fills as tokens arrive.
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: message },
+      { role: 'assistant', content: '', visuals: [], citations: [], streaming: true },
+    ])
     setLoading(true)
-    try {
-      const data = await sendChat(message, activeId)
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.answer_markdown,
-          visuals: data.visuals || [],
-          citations: data.citations || [],
-        },
-      ])
-      if (!activeId) {
-        setActiveId(data.session_id)
-        setStoredSessionId(data.session_id)
-      }
-      refreshSessions() // pick up the new/auto-titled session + reordering
-    } catch (err) {
-      setError(err.message || 'Something went wrong.')
-    } finally {
-      setLoading(false)
-    }
+
+    await sendChatStream(message, activeId, {
+      onMeta: ({ session_id }) => {
+        if (!activeId && session_id) {
+          setActiveId(session_id)
+          setStoredSessionId(session_id)
+        }
+      },
+      onToken: (text) =>
+        updateLastAssistant((m) => ({ ...m, content: m.content + text })),
+      onMetadata: ({ citations, visuals }) =>
+        updateLastAssistant({ citations: citations || [], visuals: visuals || [] }),
+      onDone: () => {
+        updateLastAssistant((m) => ({ ...m, streaming: false }))
+        setLoading(false)
+        refreshSessions() // pick up the new/auto-titled session + reordering
+      },
+      onError: (msg) => {
+        setError(msg || 'Something went wrong.')
+        // Drop the placeholder if nothing streamed; otherwise keep what we have.
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (last?.role === 'assistant' && last.streaming && !last.content) {
+            return prev.slice(0, -1)
+          }
+          return prev.map((m, i) =>
+            i === prev.length - 1 ? { ...m, streaming: false } : m,
+          )
+        })
+        setLoading(false)
+      },
+    })
   }
 
   return (

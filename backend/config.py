@@ -55,6 +55,13 @@ _DEFAULTS: dict[str, str] = {
     "TOP_K": "8",
     "VISUAL_K": "3",
     "VISUAL_SIM_THRESHOLD": "0.3",
+    # Reranking stage (retrieval -> rerank -> LLM)
+    "RERANK_ENABLED": "true",
+    "RERANK_BACKEND": "nvidia",                    # nvidia (hosted NIM) | local
+    "RERANK_MODEL": "nv-rerank-qa-mistral-4b:1",
+    "RERANK_BASE_URL": "",                         # blank -> SDK hosted default; set for a self-hosted NIM
+    "RERANK_CANDIDATES": "24",                     # candidates pulled from Chroma before reranking
+    "RERANK_TOP_N": "5",                           # reranked chunks handed to the LLM
 }
 
 
@@ -68,6 +75,11 @@ def _env(key: str) -> str:
     if value is None or value.strip() == "":
         return _DEFAULTS[key]
     return value.strip()
+
+
+def _as_bool(value: str) -> bool:
+    """Parse a truthy string (``true``/``1``/``yes``/``on``) into a bool."""
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _resolve_path(raw: str) -> Path:
@@ -109,6 +121,15 @@ class Settings(BaseModel):
     TOP_K: int = int(_DEFAULTS["TOP_K"])
     VISUAL_K: int = int(_DEFAULTS["VISUAL_K"])
     VISUAL_SIM_THRESHOLD: float = float(_DEFAULTS["VISUAL_SIM_THRESHOLD"])
+
+    # Reranking (retrieval -> rerank -> LLM). When disabled, retrieval falls back
+    # to the plain top-``TOP_K`` path, so behaviour is byte-for-byte the legacy one.
+    RERANK_ENABLED: bool = _as_bool(_DEFAULTS["RERANK_ENABLED"])
+    RERANK_BACKEND: str = _DEFAULTS["RERANK_BACKEND"]
+    RERANK_MODEL: str = _DEFAULTS["RERANK_MODEL"]
+    RERANK_BASE_URL: str = _DEFAULTS["RERANK_BASE_URL"]
+    RERANK_CANDIDATES: int = int(_DEFAULTS["RERANK_CANDIDATES"])
+    RERANK_TOP_N: int = int(_DEFAULTS["RERANK_TOP_N"])
 
     @field_validator(
         "PDF_DIR", "CHROMA_DIR", "ASSETS_DIR", "METADATA_PATH", "SQLITE_PATH",
@@ -174,6 +195,12 @@ class Settings(BaseModel):
             f"  TOP_K                = {self.TOP_K}\n"
             f"  VISUAL_K             = {self.VISUAL_K}\n"
             f"  VISUAL_SIM_THRESHOLD = {self.VISUAL_SIM_THRESHOLD}\n"
+            f"  RERANK_ENABLED       = {self.RERANK_ENABLED}\n"
+            f"  RERANK_BACKEND       = {self.RERANK_BACKEND}\n"
+            f"  RERANK_MODEL         = {self.RERANK_MODEL}\n"
+            f"  RERANK_BASE_URL      = {self.RERANK_BASE_URL or '<hosted default>'}\n"
+            f"  RERANK_CANDIDATES    = {self.RERANK_CANDIDATES}\n"
+            f"  RERANK_TOP_N         = {self.RERANK_TOP_N}\n"
             ")"
         )
 
@@ -197,6 +224,12 @@ def _build_settings() -> Settings:
         TOP_K=int(_env("TOP_K")),
         VISUAL_K=int(_env("VISUAL_K")),
         VISUAL_SIM_THRESHOLD=float(_env("VISUAL_SIM_THRESHOLD")),
+        RERANK_ENABLED=_as_bool(_env("RERANK_ENABLED")),
+        RERANK_BACKEND=_env("RERANK_BACKEND"),
+        RERANK_MODEL=_env("RERANK_MODEL"),
+        RERANK_BASE_URL=_env("RERANK_BASE_URL"),
+        RERANK_CANDIDATES=int(_env("RERANK_CANDIDATES")),
+        RERANK_TOP_N=int(_env("RERANK_TOP_N")),
     )
 
 
