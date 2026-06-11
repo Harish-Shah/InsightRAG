@@ -56,7 +56,7 @@ from backend.config import settings  # noqa: E402
 # --- Tunable heuristics ------------------------------------------------------
 RENDER_DPI = 150                 # crop/figure render resolution
 MIN_PAGE_CHARS = 40              # below this (and no visual) a page is skipped
-MIN_IMG_PX = 120                 # drop raster images smaller than this (w or h)
+MIN_IMG_PX = 120                 # drop images smaller than this (w or h)
 MAX_IMAGES_PER_PAGE = 12         # keep only the largest N raster images per page
 # Table acceptance filters (points; page is 612x792)
 TBL_MIN_WIDTH = 60.0

@@ -80,7 +80,7 @@ _DOC_PROMPT = PromptTemplate.from_template(
 # --- Chain construction ------------------------------------------------------
 @lru_cache(maxsize=1)
 def build_chain():
-    """Lazily build the composable history-aware retrieval+QA chain (singleton)."""
+    """build the composable history-aware retrieval+QA chain (singleton)."""
     llm = get_llm()
     history_aware_retriever = create_history_aware_retriever(
         llm, get_text_retriever(), _CONDENSE_PROMPT
