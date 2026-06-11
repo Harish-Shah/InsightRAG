@@ -1,10 +1,9 @@
 # RAG Chatbot - Python dependencies (Python 3.11-3.13; developed on 3.13.2)
 #
 # Versions are pinned to an exact set captured from a clean resolve into a fresh
-# .venv. The LangChain stack is held on the 0.3.x line so the APIs documented in
-# Implementation plan/TASK_LIST.md (create_history_aware_retriever,
-# create_retrieval_chain, create_stuff_documents_chain from langchain.chains)
-# work as written in Phase 3.
+# .venv. The LangChain stack is held on the 0.3.x line so the documented chain
+# APIs (create_history_aware_retriever, create_retrieval_chain,
+# create_stuff_documents_chain from langchain.chains) work as written.
 #
 # Install:  python -m venv .venv && .\.venv\Scripts\Activate.ps1
 #           pip install -r requirements.txt

@@ -1,4 +1,4 @@
-// Centralized backend calls + current-session persistence (Task 5.2).
+// Centralized backend calls + current-session persistence.
 // Same-origin "/api" is proxied to the FastAPI backend by Vite in dev.
 import axios from 'axios'
 

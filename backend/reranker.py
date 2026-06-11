@@ -4,8 +4,8 @@ The bi-encoder embedding (``bge-small``) scores a query and a passage independen
 which is fast but coarse. A cross-encoder instead reads the ``(query, passage)`` pair
 jointly, so it ranks the chunk that actually answers the question above merely
 on-topic ones. This module retrieves a wide candidate set, rescores it, and keeps
-only the best ``RERANK_TOP_N`` for the LLM - the upgrade IMPLEMENTATION_PLAN §12 calls
-out ("``bge-small`` + no reranker set a retrieval-quality ceiling").
+only the best ``RERANK_TOP_N`` for the LLM, lifting the retrieval-quality ceiling
+that ``bge-small`` alone (no reranker) imposes.
 
 Two interchangeable backends, both exposing LangChain's ``BaseDocumentCompressor``
 seam, so either drops into ``ContextualCompressionRetriever`` with no other changes:

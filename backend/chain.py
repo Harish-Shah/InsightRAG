@@ -1,4 +1,4 @@
-"""RAG chain assembly + response post-processing (Tasks 3.3, 3.4, 3.5).
+"""RAG chain assembly + response post-processing.
 
 Composes the online query brain as ONE unit (agent-ready seam for a future
 LangGraph tool):
@@ -10,7 +10,7 @@ and post-processes the raw output into the API contract::
 
     {answer_markdown, citations[], visuals[]}
 
-Public entry point used by Phase 4's /api/chat:  ``ask(query, chat_history)``.
+Public entry point used by /api/chat:  ``ask(query, chat_history)``.
 """
 
 from __future__ import annotations
@@ -167,7 +167,7 @@ def _make_visual_stripper():
     return feed, flush
 
 
-# --- Post-processing (Task 3.5) ---------------------------------------------
+# --- Post-processing ---------------------------------------------------------
 def _short_year(report_year: str) -> str:
     """'Annual Report 2022-23' -> 'AR 2022-23'."""
     return (report_year or "").replace("Annual Report", "AR").strip() or "?"

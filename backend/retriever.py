@@ -1,4 +1,4 @@
-"""Retrieval over the Chroma index (Task 3.2).
+"""Retrieval over the Chroma index.
 
 Two paths over the same store:
   * ``get_text_retriever()`` - the general top-k retriever used by the RAG chain.

@@ -1,4 +1,4 @@
-// Scrollable conversation + input + loading/error UX (Task 5.4/5.5).
+// Scrollable conversation + input + loading/error UX.
 // The streaming assistant placeholder (in App.handleSend) renders its own
 // in-bubble typing indicator, so no separate global indicator is needed.
 import { useEffect, useRef } from 'react'

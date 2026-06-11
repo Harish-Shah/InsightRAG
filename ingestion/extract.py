@@ -1,4 +1,4 @@
-"""PDF extraction pipeline (Phase 1, Tasks 1.1-1.6).
+"""PDF extraction pipeline.
 
 Turns the annual-report PDFs in ``PDF_DIR`` into a single ``metadata.json``
 manifest plus cropped/rendered PNG assets under ``ASSETS_DIR``. Each emitted
@@ -8,16 +8,16 @@ manifest plus cropped/rendered PNG assets under ``ASSETS_DIR``. Each emitted
 
 with ``content_type in {"text", "table", "image", "figure"}``.
 
-The four extractors share one per-page loop (Task 1.1):
-  * 1.2 text     - page text, cleaned, with a section heading from font sizes.
-  * 1.3 table    - table finder -> Markdown + a cropped PNG of the table bbox.
-  * 1.4 image    - get_images -> RGB PNG, tiny logos filtered, captioned.
-  * 1.5 figure   - caption-anchored page-region render (captures vector charts
-                   that get_images misses), conservative (explicit captions).
-  * 1.6 manifest - deterministic ids, per-type/PDF counts, integrity asserts.
+The four extractors share one per-page loop:
+  * text     - page text, cleaned, with a section heading from font sizes.
+  * table    - table finder -> Markdown + a cropped PNG of the table bbox.
+  * image    - get_images -> RGB PNG, tiny logos filtered, captioned.
+  * figure   - caption-anchored page-region render (captures vector charts
+               that get_images misses), conservative (explicit captions).
+  * manifest - deterministic ids, per-type/PDF counts, integrity asserts.
 
-Engine note (deviation from the plan, for performance):
-  The plan named pdfplumber as the primary text/table engine. On these
+Engine note (performance):
+  pdfplumber was evaluated as the primary text/table engine, but on these
   graphics-heavy reports pdfplumber's per-page parse is ~1s/page and tens of
   seconds on image/vector-dense pages (a full run took ~46 min). PyMuPDF's
   native ``get_text`` (~0.02s/page) and ``find_tables`` (~0.1s/page) produce
@@ -97,7 +97,7 @@ class Unit:
     asset_path: Optional[str] = None  # relative to ASSETS_DIR (visuals only)
 
 
-# --- Provenance helpers (Task 1.1) ------------------------------------------
+# --- Provenance helpers ------------------------------------------------------
 def year_slug_from_filename(filename: str) -> str:
     """``Annual_Report_2021_22 1.pdf`` -> ``2021-22`` (handles space/trailing 1)."""
     m = _YEAR_RE.search(filename)
@@ -113,7 +113,7 @@ def report_year_label(year_slug: str) -> str:
     return year_slug.replace("-", " ")
 
 
-# --- Text cleaning & headings (Task 1.2) ------------------------------------
+# --- Text cleaning & headings ------------------------------------------------
 def _raw_page_text(fitz_page) -> str:
     try:
         return fitz_page.get_text("text") or ""
@@ -243,7 +243,7 @@ def _text_above(fitz_page, rect: fitz.Rect, height: float = 64.0, limit: int = 1
     return " ".join(chosen)[:limit]
 
 
-# --- Table extraction (Task 1.3) --------------------------------------------
+# --- Table extraction --------------------------------------------------------
 def _cells_to_markdown(rows: list[list[Optional[str]]]) -> tuple[str, float]:
     """Build a Markdown table from cells; return (markdown, filled_ratio)."""
     norm = [[_WS_RE.sub(" ", (c or "").replace("\n", " ")).strip().replace("|", "\\|")
@@ -319,7 +319,7 @@ def extract_tables(fitz_page, year_slug: str, page_no: int, section: Optional[st
     return units, accepted_rects
 
 
-# --- Raster image extraction (Task 1.4) -------------------------------------
+# --- Raster image extraction -------------------------------------------------
 def extract_images(doc, fitz_page, year_slug: str, page_no: int, section: Optional[str],
                    assets_root: Path, doc_seen_xrefs: set[int]) -> list[Unit]:
     units: list[Unit] = []
@@ -375,7 +375,7 @@ def extract_images(doc, fitz_page, year_slug: str, page_no: int, section: Option
     return units
 
 
-# --- Caption-anchored figure regions (Task 1.5) -----------------------------
+# --- Caption-anchored figure regions -----------------------------------------
 def extract_figures(fitz_page, cleaned_text: str, year_slug: str, page_no: int,
                     section: Optional[str], assets_root: Path,
                     avoid_rects: list[fitz.Rect]) -> list[Unit]:
@@ -529,7 +529,7 @@ def process_pdf(pdf_path: Path, assets_root: Path,
     return units, stats
 
 
-# --- Manifest assembly + integrity (Task 1.6) -------------------------------
+# --- Manifest assembly + integrity -------------------------------------------
 def write_manifest(units: list[Unit], assets_root: Path, manifest_path: Path,
                    per_pdf: dict[str, PdfStats]) -> dict:
     ids = [u.id for u in units]

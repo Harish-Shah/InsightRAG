@@ -1,4 +1,4 @@
-// One chat message: role-styled bubble + markdown + visuals + citations (Task 5.4/5.6).
+// One chat message: role-styled bubble + markdown + visuals + citations.
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'

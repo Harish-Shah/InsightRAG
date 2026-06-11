@@ -5,7 +5,7 @@ model names, storage paths, retrieval parameters). It is imported by the
 ingestion pipeline, the backend services, and the NIM smoke test, so nothing is
 hard-coded anywhere else.
 
-Design rules (see Implementation plan/TASK_LIST.md, Task 0.3):
+Design rules:
   * Values come from a local ``.env`` file (loaded via python-dotenv) and fall
     back to sane defaults, so the config always loads - even with no ``.env``.
   * Storage paths are resolved to absolute paths against the project root, so

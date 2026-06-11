@@ -1,4 +1,4 @@
-"""FastAPI application (Tasks 4.2-4.5) - Milestone M2.
+"""FastAPI application.
 
 Wraps the RAG chain (`chain.ask`) and SQLite persistence (`db`) in an HTTP API:
 

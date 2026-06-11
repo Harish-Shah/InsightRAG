@@ -1,5 +1,4 @@
-// Single-page chatbot: sidebar + chat panel; send flow + session reopen
-// (Tasks 5.5 + 5.7).
+// Single-page chatbot: sidebar + chat panel; send flow + session reopen.
 import { useCallback, useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatPanel from './components/ChatPanel'

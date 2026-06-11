@@ -1,4 +1,4 @@
-"""SQLite persistence for sessions + messages (Task 4.1).
+"""SQLite persistence for sessions + messages.
 
 Durable storage so chats reopen with full content (text, visuals, citations).
 Uses stdlib ``sqlite3`` with a fresh connection per call (safe under FastAPI's

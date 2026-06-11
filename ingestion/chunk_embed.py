@@ -1,6 +1,6 @@
-"""Chunking + embedding into ChromaDB (Tasks 2.2 + 2.4).
+"""Chunking + embedding into ChromaDB.
 
-Reads the Phase-1 manifest (``data/metadata.json``), splits text units to fit the
+Reads the extraction manifest (``data/metadata.json``), splits text units to fit the
 bge 512-token window while keeping each table/image/figure as a single unit, then
 embeds and upserts everything into the persistent Chroma collection.
 

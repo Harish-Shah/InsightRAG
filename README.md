@@ -11,9 +11,6 @@ sessions persist locally so you can reopen a prior conversation with its full co
 - **Backend:** FastAPI + SQLite · **Frontend:** React 19 + Vite + Tailwind v4 (single page)
 - **Orchestration:** LangChain (history-aware retrieval chain; agent-ready seam for later LangGraph)
 
-> Architecture & rationale: [`Implementation plan/IMPLEMENTATION_PLAN.md`](Implementation%20plan/IMPLEMENTATION_PLAN.md).
-> Task-by-task tracker: [`Implementation plan/TASK_LIST.md`](Implementation%20plan/TASK_LIST.md).
-
 ---
 
 ## Features

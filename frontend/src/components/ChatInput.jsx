@@ -1,4 +1,4 @@
-// Message input with Enter-to-send / Shift+Enter newline (Task 5.5).
+// Message input with Enter-to-send / Shift+Enter newline.
 import { useState } from 'react'
 
 export default function ChatInput({ onSend, disabled }) {

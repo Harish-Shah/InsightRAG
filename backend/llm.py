@@ -1,4 +1,4 @@
-"""NIM chat-model factory (Task 3.1).
+"""NIM chat-model factory.
 
 One place to construct the generation LLM from env (model/key/base-URL all live
 in ``.env`` and can be swapped with no code change). Wrapped with retry/backoff

@@ -34,7 +34,7 @@ data/metadata.json
 .cache/
 *.bin.lock
 
-# ---- Frontend (Phase 5) ----
+# ---- Frontend ----
 node_modules/
 frontend/dist/
 frontend/dist-ssr/

@@ -1,4 +1,4 @@
-// Session list + New Chat (Task 5.3).
+// Session list + New Chat.
 export default function Sidebar({ sessions, activeId, onSelect, onNew, onDelete }) {
   return (
     <aside className="flex h-full w-72 flex-col border-r border-slate-200 bg-white">

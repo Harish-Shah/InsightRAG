@@ -1,8 +1,8 @@
-"""ChromaDB vector store helper (Task 2.3).
+"""ChromaDB vector store helper.
 
 A single, persistent, local Chroma collection (``annual_reports``) backed by the
 shared bge embedder. ``get_vectorstore()`` is the one entry point reused by the
-ingestion populate step (Phase 2) and the retriever (Phase 3) so both talk to
+ingestion populate step and the retriever so both talk to
 the same store with the same embedding function.
 
 Chroma only accepts metadata values of type str/int/float/bool (no ``None``, no

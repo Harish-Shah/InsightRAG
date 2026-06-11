@@ -1,4 +1,4 @@
-"""Ingestion orchestrator (Task 2.5) - Milestone M1.
+"""Ingestion orchestrator.
 
 One command runs the whole offline pipeline end-to-end and supports clean
 rebuilds and quick retrieval checks::
@@ -103,7 +103,7 @@ def run_pipeline(reset: bool, skip_extract: bool) -> int:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description="Run the full ingestion pipeline (M1)")
+    ap = argparse.ArgumentParser(description="Run the full ingestion pipeline")
     ap.add_argument("--reset", action="store_true",
                     help="clear assets + manifest + vector store, then rebuild")
     ap.add_argument("--skip-extract", action="store_true",

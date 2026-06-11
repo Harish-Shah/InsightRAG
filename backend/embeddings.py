@@ -1,4 +1,4 @@
-"""Shared embedding model (Task 2.1).
+"""Shared embedding model.
 
 A single bge embedder is used by **both** ingestion and query so the document
 and query vector spaces match - mixing models silently breaks retrieval.

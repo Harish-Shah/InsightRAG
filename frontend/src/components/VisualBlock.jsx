@@ -1,4 +1,4 @@
-// Returned visuals (images + click-to-zoom) and citation chips (Task 5.6).
+// Returned visuals (images + click-to-zoom) and citation chips.
 import { useEffect, useState } from 'react'
 import { assetUrl } from '../utils/api'
 
